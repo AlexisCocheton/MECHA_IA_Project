@@ -1,0 +1,53 @@
+{
+  "classifier": {
+    "modele": "RandomForestClassifier",
+    "hyperparametres": {
+      "n_estimators": 150,
+      "max_depth": 12,
+      "min_samples_leaf": 5,
+      "class_weight": "balanced"
+    },
+    "accuracy": 0.9355,
+    "classes": [
+      "a_risque",
+      "critique",
+      "en_panne",
+      "normal"
+    ],
+    "features": [
+      "age_machine_h",
+      "h_depuis_maintenance",
+      "temperature_C",
+      "vibration_mm_s",
+      "courant_A",
+      "pression_bar",
+      "vitesse_tr_min"
+    ]
+  },
+  "rul_regressor": {
+    "modele": "RandomForestRegressor",
+    "hyperparametres": {
+      "n_estimators": 150,
+      "max_depth": 12,
+      "min_samples_leaf": 5
+    },
+    "MAE_heures": 16.54,
+    "RMSE_heures": 27.65,
+    "R2": 0.9857,
+    "features": [
+      "age_machine_h",
+      "h_depuis_maintenance",
+      "temperature_C",
+      "vibration_mm_s",
+      "courant_A",
+      "pression_bar",
+      "vitesse_tr_min"
+    ]
+  },
+  "baseline_ridge": {
+    "modele": "RidgeCV",
+    "MAE_heures": 32.71,
+    "RMSE_heures": 41.06,
+    "R2": 0.9684
+  }
+}

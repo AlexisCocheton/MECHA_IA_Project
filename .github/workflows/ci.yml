@@ -1,0 +1,127 @@
+# ─── MECHA Predictive Maintenance — Pipeline CI/CD ───────────────────────────
+# GitHub Actions — Intégration Continue
+# Déclenché sur : push sur main/develop + Pull Requests
+
+name: MECHA CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1 : Tests & qualité du code ────────────────────────────────────────
+  tests:
+    name: Tests & Qualité
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Installation des dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8
+
+      - name: Lint (flake8)
+        run: |
+          flake8 api/ models/ data/ --max-line-length=100 --ignore=E501,W503
+
+      - name: Génération des données de test
+        run: |
+          cd data && python generate_dataset.py
+
+      - name: Entraînement des modèles (CI)
+        run: |
+          cd models && python train_models.py
+
+      - name: Tests unitaires API
+        run: |
+          pytest tests/ -v --cov=api --cov-report=xml
+
+      - name: Upload modèles entraînés
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-models
+          path: |
+            models/*.pkl
+            models/metrics.json
+
+      - name: Upload rapport de couverture
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: coverage.xml
+
+  # ── Job 2 : Construction de l'image Docker ─────────────────────────────────
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: tests
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Téléchargement des modèles entraînés
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+          path: models/
+
+      - name: Configuration Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construction de l'image Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: mecha-predictive-maintenance:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test de l'image Docker (smoke test)
+        run: |
+          docker run --rm -d -p 8000:8000 \
+            --name mecha-test \
+            mecha-predictive-maintenance:${{ github.sha }}
+          sleep 10
+          curl -f http://localhost:8000/health || exit 1
+          docker stop mecha-test
+          echo "✅ Smoke test réussi"
+
+  # ── Job 3 : Publication (uniquement sur main) ───────────────────────────────
+  docker-push:
+    name: Push Docker Registry
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Connexion Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Construction et publication
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/mecha-predictive-maintenance:latest
+            ${{ secrets.DOCKER_USERNAME }}/mecha-predictive-maintenance:${{ github.sha }}
